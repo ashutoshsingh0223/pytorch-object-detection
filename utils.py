@@ -1,9 +1,9 @@
-from typing import Tuple, Any, Dict
+from typing import Tuple, Any, Dict, Optional
 
 import torch.nn as nn
 
 
-def get_activation_and_params(name) -> Tuple[Any, Dict[str, Any]]:
+def get_activation_and_params(name) -> Tuple[Any, Optional[Dict[str, Any]]]:
     """
     Get supported activation function with default params by name
     Args:
@@ -16,7 +16,8 @@ def get_activation_and_params(name) -> Tuple[Any, Dict[str, Any]]:
         'sigmoid': nn.Sigmoid,
         'relu6': nn.ReLU6,
         'leaky_relu': nn.LeakyReLU,
-        'softmax': nn.Softmax
+        'softmax': nn.Softmax,
+        'linear': None,
     }
 
     params_index = {
@@ -24,7 +25,8 @@ def get_activation_and_params(name) -> Tuple[Any, Dict[str, Any]]:
         'sigmoid': {},
         'relu6': {'inplace': True},
         'leaky_relu': {'negative_slope': 0.01, 'inplace': True},
-        'softmax': {'dim': 1}
+        'softmax': {'dim': 1},
+        'linear': None
     }
     return index[name], params_index[name]
 
