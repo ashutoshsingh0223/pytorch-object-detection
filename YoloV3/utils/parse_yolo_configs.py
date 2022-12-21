@@ -112,8 +112,6 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
             anchors = [int(a.strip()) for a in block['anchors'].split(',')]
             anchors = [(anchors[i], anchors[i+1]) for i in range(0, len(anchors), 2)]
             anchors = [anchors[i] for i in masks]
-
-            module_block = nn.Sequential()
             module_block.add_module(f'detection_{index}', DetectionLayer(anchors=anchors))
 
         in_channels = out_channels

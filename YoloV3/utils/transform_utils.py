@@ -43,4 +43,19 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     offsets = torch.cat((x, y), 1).repeat(1, num_anchors).view(-1, 2).unsqueeze(0)
 
     prediction[:, :, :2] += offsets
+
+    anchors = torch.FloatTensor(anchors)
+    if CUDA:
+        anchors = anchors.cuda()
+
+    # Log space transform for height and width
+    anchors = anchors.repeat(grid_size * grid_size, 1).unsqueeze(0)
+    prediction[:, :, 2:4] = torch.exp(prediction[:, :, 2:4]) * anchors
+
+    # Sigmoid on class scores. One bounding box may predict different classes, hence no softmax.
+    prediction[:, :, 5: 5 + num_classes] = torch.sigmoid((prediction[:, :, 5: 5 + num_classes]))
+
+    # Scale the bbox attributes to fit the size of image from the size of feature map.
+    # Example: feature map size = 13x13 and image size = 416x416 then stride = 32 = 416 // 13
+    prediction[:, :, :4] *= stride
     return prediction

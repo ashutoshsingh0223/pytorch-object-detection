@@ -14,13 +14,14 @@ class YoloV3(nn.Module):
         super(YoloV3, self).__int__()
 
         self.blocks = parse_yolo_config(config_path)
-        self.module_list = get_layers_from_blocks(blocks=self.blocks)
+        self.net_info, self.module_list = get_layers_from_blocks(blocks=self.blocks)
 
-    def forward(self, x):
+    def forward(self, x, cuda: bool = True):
         modules = self.blocks[1:]
         # Catch outputs for route layer
         outputs = []
 
+        write = False
         for i, module in enumerate(modules):
             type_ = module['type']
 
@@ -53,7 +54,22 @@ class YoloV3(nn.Module):
                 x = outputs[i - 1] + outputs[i + from_]
 
             elif type_ == 'yolo':
-                
+                anchors = self.module_list[i][0].anchors
+                # Get the input dimensions
+                inp_dim = int(self.net_info["height"])
 
+                # Get the number of classes
+                num_classes = int(module["classes"])
+
+                x = x.data
+                x = predict_transform(x, inp_dim, anchors, num_classes, cuda)
+
+                if not write:
+                    detections = x
+                    write = True
+                else:
+                    detections = torch.cat((detections, x), 0)
 
             outputs.append(x)
+
+        return detections
