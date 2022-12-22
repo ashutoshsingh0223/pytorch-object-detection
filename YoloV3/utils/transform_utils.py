@@ -6,8 +6,6 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 
-import cv2
-
 
 def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[Tuple[int, int]], num_classes: int,
                       cuda: bool = True):
@@ -45,7 +43,7 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     prediction[:, :, :2] += offsets
 
     anchors = torch.FloatTensor(anchors)
-    if CUDA:
+    if cuda:
         anchors = anchors.cuda()
 
     # Log space transform for height and width
@@ -59,3 +57,43 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     # Example: feature map size = 13x13 and image size = 416x416 then stride = 32 = 416 // 13
     prediction[:, :, :4] *= stride
     return prediction
+
+
+def transform_detections(predictions: 'Tensor', confidence: float, num_classes: int, nms_threshold: float = 0.4):
+    conf_mask = (predictions[:, :, 4] > confidence).float().unsqueeze(2)
+    predictions = predictions * conf_mask
+
+    # We have bbox in tuples like (centre_x, centre_y, width, height) but it's easier to calculate IoU
+    # if we have upper left co-ordinate and lower right co-ordinate of the box
+    box_corner = predictions.new(predictions.shape)
+    box_corner[:, :, 0] = (predictions[:, :, 0] - predictions[:, :, 2] / 2)
+    box_corner[:, :, 1] = (predictions[:, :, 1] - predictions[:, :, 3] / 2)
+    box_corner[:, :, 2] = (predictions[:, :, 0] + predictions[:, :, 2] / 2)
+    box_corner[:, :, 3] = (predictions[:, :, 1] + predictions[:, :, 3] / 2)
+    predictions[:, :, :4] = box_corner[:, :, :4]
+
+    for image_pred in predictions:
+        # Out of 80 classes keep the class index with max score along with its score
+        max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keep_dim=True)
+        max_conf_score = max_conf_score.float()
+        max_conf_index = max_conf_index.float()
+        seq = (image_pred[:, :5], max_conf_score, max_conf_index)
+
+        # Let's remove the bounding boxes we had set to zero by using 'confidence' or objectness score
+        non_zero = torch.non_zero(image_pred[:, 4])
+        # 7 becuase of 5 bbox attrs and 1 each for max class index and corresponding score
+
+        try:
+            image_pred = image_pred[non_zero.unsqueeze(1), :].view(-1, 7)
+        except:
+            continue
+
+        # The above code does not raise exception for older torch versions where scalars are supported if image_pred
+        # is empty
+
+        if image_pred.shape[0] == 0:
+            continue
+
+        unique_classes = torch.unique(image_pred[:, -1])
+
+

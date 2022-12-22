@@ -1,9 +1,13 @@
 from typing import Tuple, Any, Dict, Optional
 
+from PIL import Image
+import numpy as np
+
 import torch.nn as nn
+from torch import Variable, from_numpy
 
 
-def get_activation_and_params(name) -> Tuple[Any, Optional[Dict[str, Any]]]:
+def get_activation_and_params(name: str) -> Tuple[Any, Optional[Dict[str, Any]]]:
     """
     Get supported activation function with default params by name
     Args:
@@ -40,5 +44,16 @@ def get_pooling_from_params(params: Dict[str, Any]) -> 'nn.Module':
 
     pooling_layer = index[type_](**params)
     return pooling_layer
+
+
+def get_test_input(size: Tuple[int, int] = (416, 416), batch: bool = True):
+    img = Image.open("dog-cycle-car.png")
+    img = img.resize(size)          #Resize to the input dimension
+    img = np.asarray(img)
+    img_ = img.transpose((2, 0, 1))  # BGR -> RGB | H X W C -> C X H X W
+    img_ = img_[np.newaxis, :, :, :]/255.0       #Add a channel at 0 (for batch) | Normalise
+    img_ = from_numpy(img_).float()     #Convert to float
+    img_ = Variable(img_)                     # Convert to Variable
+    return img_
 
 
