@@ -4,6 +4,7 @@ from PIL import Image
 import numpy as np
 
 import torch.nn as nn
+from torch import Tensor
 from torch import Variable, from_numpy
 
 
@@ -57,3 +58,11 @@ def get_test_input(size: Tuple[int, int] = (416, 416), batch: bool = True):
     return img_
 
 
+def unique(tensor: 'Tensor'):
+    tensor_np = tensor.cpu().numpy()
+    unique_np = np.unique(tensor_np)
+    unique_tensor = torch.from_numpy(unique_np)
+
+    tensor_res = tensor.new(unique_tensor.shape)
+    tensor_res.copy_(unique_tensor)
+    return tensor_res

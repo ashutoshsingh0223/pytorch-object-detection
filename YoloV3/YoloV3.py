@@ -6,7 +6,7 @@ import torch.nn as nn
 
 
 from YoloV3.utils.parse_yolo_configs import get_layers_from_blocks, parse_yolo_config
-from YoloV3.utils.transform_utils import predict_transform
+from YoloV3.utils import predict_transform
 
 
 class YoloV3(nn.Module):

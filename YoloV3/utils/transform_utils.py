@@ -4,7 +4,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+
+from torchvision.ops import box_iou
+
 import numpy as np
+
+from utils import unique
 
 
 def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[Tuple[int, int]], num_classes: int,
@@ -64,7 +69,7 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
     predictions = predictions * conf_mask
 
     # We have bbox in tuples like (centre_x, centre_y, width, height) but it's easier to calculate IoU
-    # if we have upper left co-ordinate and lower right co-ordinate of the box
+    # if we have lower left co-ordinate and upper right co-ordinate of the box
     box_corner = predictions.new(predictions.shape)
     box_corner[:, :, 0] = (predictions[:, :, 0] - predictions[:, :, 2] / 2)
     box_corner[:, :, 1] = (predictions[:, :, 1] - predictions[:, :, 3] / 2)
@@ -72,7 +77,12 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
     box_corner[:, :, 3] = (predictions[:, :, 1] + predictions[:, :, 3] / 2)
     predictions[:, :, :4] = box_corner[:, :, :4]
 
-    for image_pred in predictions:
+    batch_size = prediction.size(0)
+
+    write = False
+    output = None
+    for ind in range(batch_size):
+        image_pred = prediction[ind]
         # Out of 80 classes keep the class index with max score along with its score
         max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keep_dim=True)
         max_conf_score = max_conf_score.float()
@@ -84,16 +94,70 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
         # 7 becuase of 5 bbox attrs and 1 each for max class index and corresponding score
 
         try:
-            image_pred = image_pred[non_zero.unsqueeze(1), :].view(-1, 7)
+            image_pred_ = image_pred[non_zero.unsqueeze(1), :].view(-1, 7)
         except:
             continue
 
         # The above code does not raise exception for older torch versions where scalars are supported if image_pred
         # is empty
 
-        if image_pred.shape[0] == 0:
+        if image_pred_.shape[0] == 0:
             continue
 
-        unique_classes = torch.unique(image_pred[:, -1])
+        unique_classes = unique(image_pred[:, -1])
 
+        for cls in unique_classes:
+            # Get the detections with one particular class
+            cls_mask = image_pred_ * (image_pred_[:, -1] == cls).float().unsqueeze(1)
+            class_mask_ind = torch.nonzero(cls_mask[:, -2]).squeeze()
+            image_pred_class = image_pred_[class_mask_ind].view(-1, 7)
 
+            conf_sort_index = torch.sort(image_pred_class[:, 4], descending=True)[1]
+            # Sorted image detections
+            image_pred_class = image_pred_class[conf_sort_index]
+            # Number od detections
+            idx = image_pred_class.size(0)
+
+            # Get the IOUs of all boxes that come after the one we are looking at
+            # in the loop
+            for i in range(idx):
+                # Calculate iou between current bounding bbox and all subsequent bboxes for this class
+                try:
+                    # ious.shape == [1, len(image_pred_class[i + 1:])]
+                    ious = box_iou(image_pred_class[i].unsqueeze(0), image_pred_class[i + 1:])
+
+                except ValueError:
+                    # To handle ValueError when image_pred_class[i + 1:] is an empty tensor
+                    break
+                except IndexError:
+                    # To handle index error with image_pred_class[i]
+                    break
+                # Both these errors can happen since we remove redundant rows(bboxes) from image_pred_classes
+
+                # Zero out all the detections that have IoU > threshold
+                # All the boxes that have IOUs greater than NMS with current box are removed except fot the box
+                # with max objectness score. Since the we already sorted them, all the subsequent boxes with ious
+                # greater than nms_conf with current box are set to zero. In summary -
+
+                # "If we have two bounding boxes of the same class having an an IoU larger than a threshold,
+                # then the one with lower class confidence is eliminated"
+                iou_mask = (ious < nms_conf).float().unsqueeze(1)
+                image_pred_class[i + 1:] *= iou_mask
+
+                # Now remove the entries that were set to zero.
+                non_zero_ind = torch.nonzero(image_pred_class[:, 4]).squeeze()
+                image_pred_class = image_pred_class[non_zero_ind].view(-1, 7)
+
+            batch_ind = image_pred_class.new(image_pred_class.size(0), 1).fill_(ind)
+            # Repeat the batch_id for as many detections of the class cls in the image
+            out = torch.cat((batch_ind, image_pred_class), 1)
+
+            if not write:
+                output = out
+                write = True
+            else:
+                output = torch.cat((output, out), 0)
+
+    if output is not None:
+        return output
+    return output
