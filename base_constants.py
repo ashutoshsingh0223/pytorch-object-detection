@@ -4,3 +4,9 @@ BASE_POOL_PARAMS = {
     'kernel_size': 2,
     'stride': 2
 }
+
+TRAIN = 'train'
+VALIDATION = 'validation'
+TEST = 'test'
+
+COCO_BOX = 'bbox'
