@@ -1,5 +1,3 @@
-from __future__ import division
-
 from typing import List, Any, Optional, Union
 from pathlib import Path
 import time
@@ -13,11 +11,6 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 import pandas as pd
-
-from util import *
-
-import os
-import os.path as osp
 
 import pickle as pkl
 import random
@@ -46,7 +39,7 @@ def arg_parse():
     parser.add_argument("--det", help="Image / Directory to store detections to", type=str)
     parser.add_argument("--annotations-file", help="Path to annotations file", type=str)
     parser.add_argument("--data-augmentation", help='Data Augmentation to use', default='default', type=str)
-    parse.add_argument("--classes", help='File path for class names', required=False)
+    parser.add_argument("--classes", help='File path for class names', required=False)
     parser.add_argument("--batch-size", help="Batch size", default=1, type=int)
     parser.add_argument("--confidence", help="Object Confidence to filter predictions", default=0.5, type=float)
     parser.add_argument("--nms-threshold", help="NMS threshold", default=0.4, type=float)
@@ -64,7 +57,7 @@ def get_dataset(name: str, datapath: Union['Path', str], mode: str = TRAIN, tran
     index = {'coco': get_coco}
 
     data_fn = index[name]
-    dataset = data_fn(image_dir=datapath, annotations_file=args.annotations_file, transforms=transforms)
+    dataset = data_fn(image_dir=datapath, mode=mode, annotations_file=annotations_file, transforms=transforms)
     return dataset
 
 
@@ -99,12 +92,12 @@ input_dim = int(model.net_info["height"])
 assert input_dim % 32 == 0
 assert input_dim > 32
 
-#If there's a GPU available, put the model on GPU
+# If there's a GPU available, put the model on GPU
 if CUDA:
     model.cuda()
-#Set the model in evaluation mode
+# Set the model in evaluation mode
 model.eval()
 
 train_dataset = get_dataset('coco', datapath=args.images, mode=TRAIN, transforms=get_transform(True, args))
-val_dataset = get_dataset('coco', datapath=args.images, mode=VALIDATION, transforms=et_transform(False, args))
-test_dataset = get_dataset('coco', datapath=args.images, mode=TEST, transforms=et_transform(False, args))
+val_dataset = get_dataset('coco', datapath=args.images, mode=VALIDATION, transforms=get_transform(False, args))
+test_dataset = get_dataset('coco', datapath=args.images, mode=TEST, transforms=get_transform(False, args))

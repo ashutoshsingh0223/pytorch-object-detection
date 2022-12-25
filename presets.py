@@ -11,7 +11,6 @@ class DetectionPresetTrain():
         pass
 
 
-
 class DetectionPresetTrainResize():
     def __init__(self, *, size: Tuple[int, int],
                  padding_color: Tuple[int, int, int] = (128, 128, 128), hflip_prob: float = 0.5,
@@ -25,8 +24,8 @@ class DetectionPresetTrainResize():
                 ]
             )
 
-        def __call__(self, img: Image, target: Optional[Dict[str, 'Tensor']] = None):
-            return self.transforms(img, target)
+    def __call__(self, img: Image, target: Optional[Dict[str, 'Tensor']] = None):
+        return self.transforms(img, target)
 
 
 class DetectionPresetEval:
@@ -36,6 +35,7 @@ class DetectionPresetEval:
                 T.PILToTensor()
             ]
         )
+
     def __call__(self, img: 'Image', target: Optional[Dict[str, 'Tensor']] = None):
         return self.transforms(img, target)
 
@@ -48,5 +48,6 @@ class DetectionPresetEvalResize:
                 T.PILToTensor()
             ]
         )
+
     def __call__(self, img: 'Image', target: Optional[Dict[str, 'Tensor']] = None):
         return self.transforms(img, target)

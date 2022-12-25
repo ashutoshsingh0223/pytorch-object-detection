@@ -77,18 +77,18 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
     box_corner[:, :, 3] = (predictions[:, :, 1] + predictions[:, :, 3] / 2)
     predictions[:, :, :4] = box_corner[:, :, :4]
 
-    batch_size = prediction.size(0)
+    batch_size = predictions.size(0)
 
     write = False
     output = None
     for ind in range(batch_size):
-        image_pred = prediction[ind]
+        image_pred = predictions[ind]
         # Out of 80 classes keep the class index with max score along with its score
         max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keep_dim=True)
         max_conf_score = max_conf_score.float()
         max_conf_index = max_conf_index.float()
         seq = (image_pred[:, :5], max_conf_score, max_conf_index)
-
+        image_pred = torch.cat(seq, 1)
         # Let's remove the bounding boxes we had set to zero by using 'confidence' or objectness score
         non_zero = torch.non_zero(image_pred[:, 4])
         # 7 becuase of 5 bbox attrs and 1 each for max class index and corresponding score
@@ -136,12 +136,12 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
 
                 # Zero out all the detections that have IoU > threshold
                 # All the boxes that have IOUs greater than NMS with current box are removed except fot the box
-                # with max objectness score. Since the we already sorted them, all the subsequent boxes with ious
+                # with max objectness score. Since then, we already sorted them, all the subsequent boxes with ious
                 # greater than nms_conf with current box are set to zero. In summary -
 
-                # "If we have two bounding boxes of the same class having an an IoU larger than a threshold,
+                # "If we have two bounding boxes of the same class having an IoU larger than a threshold,
                 # then the one with lower class confidence is eliminated"
-                iou_mask = (ious < nms_conf).float().unsqueeze(1)
+                iou_mask = (ious < nms_threshold).float().unsqueeze(1)
                 image_pred_class[i + 1:] *= iou_mask
 
                 # Now remove the entries that were set to zero.

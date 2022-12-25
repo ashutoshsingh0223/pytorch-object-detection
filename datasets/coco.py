@@ -1,4 +1,4 @@
-from typing import Union, Any
+from typing import Union, Any, List
 from pathlib import Path
 
 from torchvision.datasets import CocoDetection
@@ -12,7 +12,7 @@ def get_coco(image_dir: Union['Path', str], annotations_file: Union['Path', str]
     transforms = T.Compose(transforms)
     dataset = CocoDetection(root=image_dir, annFile=annotations_file, transforms=transforms)
 
-    if image_set == TRAIN:
+    if mode == TRAIN:
         pass
         # dataset = _coco_remove_images_without_annotations(dataset, iou_types=iou_types)
 
