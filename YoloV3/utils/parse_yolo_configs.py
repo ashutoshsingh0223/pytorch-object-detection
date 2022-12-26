@@ -58,6 +58,8 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
             except:
                 batch_norm = 0
 
+            batch_norm = bool(batch_norm)
+
             activation = activation_map_from_yolo[block['activation']]
             out_channels = int(block['filters'])
             kernel_size = int(block['size'])
@@ -69,8 +71,9 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
             except:
                 padding = 0
 
+            # Conv bias is set to false if batch norm present
             module_block = Conv2DBlock(in_channels, out_channels, kernel_size,
-                                       padding, stride, bool(batch_norm), activation)
+                                       padding, stride, batch_norm, activation, conv_bias=not batch_norm)
         elif type_ == 'shortcut':
             module_block.add_module(f'shortcut_{index}', EmptyLayer())
 

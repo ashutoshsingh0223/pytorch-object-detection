@@ -52,7 +52,7 @@ def arg_parse():
     return parser.parse_args()
 
 
-def get_dataset(name: str, datapath: Union['Path', str], mode: str = TRAIN, transforms: Optional[List[Any]] = None,
+def get_dataset(name: str, datapath: Union['Path', str], mode: str = TRAIN, transforms: Optional[Any] = None,
                 annotations_file: Optional[str] = None):
     index = {'coco': get_coco}
 
@@ -101,3 +101,9 @@ model.eval()
 train_dataset = get_dataset('coco', datapath=args.images, mode=TRAIN, transforms=get_transform(True, args))
 val_dataset = get_dataset('coco', datapath=args.images, mode=VALIDATION, transforms=get_transform(False, args))
 test_dataset = get_dataset('coco', datapath=args.images, mode=TEST, transforms=get_transform(False, args))
+
+train_loader = DataLoader(dataset=train_dataset, num_workers=args.workers, shuffle=True)
+val_loader = DataLoader(dataset=test_dataset, num_workers=args.workers, shuffle=False)
+test_loader = DataLoader(dataset=test_dataset, num_workers=args.workers, shuffle=False)
+
+

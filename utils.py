@@ -3,9 +3,10 @@ from typing import Tuple, Any, Dict, Optional
 from PIL import Image
 import numpy as np
 
+import torch
 import torch.nn as nn
-from torch import Tensor
-from torch import Variable, from_numpy
+from torch import from_numpy, Tensor
+from torch.autograd.variable import Variable
 
 
 def get_activation_and_params(name: str) -> Tuple[Any, Optional[Dict[str, Any]]]:
