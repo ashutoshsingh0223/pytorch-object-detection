@@ -115,7 +115,7 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
             conf_sort_index = torch.sort(image_pred_class[:, 4], descending=True)[1]
             # Sorted image detections
             image_pred_class = image_pred_class[conf_sort_index]
-            # Number od detections
+            # Number of detections
             idx = image_pred_class.size(0)
 
             # Get the IOUs of all boxes that come after the one we are looking at
@@ -149,7 +149,7 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
                 image_pred_class = image_pred_class[non_zero_ind].view(-1, 7)
 
             batch_ind = image_pred_class.new(image_pred_class.size(0), 1).fill_(ind)
-            # Repeat the batch_id for as many detections of the class cls in the image
+            # Repeat the batch_id(index of image in the batch) for as many detections of the class cls in the image
             out = torch.cat((batch_ind, image_pred_class), 1)
 
             if not write:

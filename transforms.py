@@ -2,6 +2,7 @@ from typing import List, Dict, Optional, Tuple
 
 from PIL import Image
 
+import torch
 from torch import nn, Tensor
 
 from torchvision.transforms import functional as F, InterpolationMode, transforms as T
@@ -32,6 +33,32 @@ class PILToTensor(nn.Module):
         return image, target
 
 
+class ConvertImageDtype(nn.Module):
+    def __init__(self, dtype: torch.dtype = torch.float) -> None:
+        super().__init__()
+        self.dtype = dtype
+
+    def forward(
+        self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
+    ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+        image = F.convert_image_dtype(image, self.dtype)
+        return image, target
+
+
+# Already managed by ConvertImageDtype
+
+# class ScaleImage(nn.Module):
+#     def __init__(self, scale: float = 255.0) -> None:
+#         super().__init__()
+#         self.scale = scale
+#
+#     def forward(
+#         self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
+#     ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
+#         image = image.div(self.scale)
+#         return image, target
+
+
 class ResizeImageAspectRatioPreserve(nn.Module):
 
     def __init__(self, size: Tuple[int, int], padding_color: Tuple[int, int, int] = (128, 128, 128)):
@@ -50,8 +77,8 @@ class Compose:
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image: 'Image', target: Optional[Dict[str, 'Tensor']]) -> Tuple[
-        'Tensor', Optional[Dict[str, 'Tensor']]]:
+    def __call__(self, image: 'Image', target: Optional[Dict[str, 'Tensor']]
+                 ) -> Tuple['Tensor', Optional[Dict[str, 'Tensor']]]:
         for t in self.transforms:
             image, target = t(image, target)
         return image, target

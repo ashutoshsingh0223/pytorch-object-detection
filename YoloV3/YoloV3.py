@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional, Dict, Any
 from pathlib import Path
 
 import torch
@@ -18,7 +18,7 @@ class YoloV3(nn.Module):
         self.blocks = parse_yolo_config(config_path)
         self.net_info, self.module_list = get_layers_from_blocks(blocks=self.blocks)
 
-    def forward(self, x, cuda: bool = True):
+    def forward(self, x, target: Optional[Dict[str, Any]] = None, cuda: bool = True):
         modules = self.blocks[1:]
         # Catch outputs for route layer
         outputs = []
@@ -76,7 +76,7 @@ class YoloV3(nn.Module):
 
         return detections
 
-    def load_weights(self, weightfile):
+    def load_weights(self, weightfile: Union['Path', str]):
         # Open the weights file
         fp = open(weightfile, "rb")
 

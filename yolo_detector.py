@@ -9,8 +9,6 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 
 import numpy as np
-import cv2
-import pandas as pd
 
 import pickle as pkl
 import random
@@ -73,37 +71,38 @@ def get_transform(train, args):
         return presets.DetectionPresetEvalResize(size=(args.resolution, args.resolution))
 
 
-args = arg_parse()
-images = args.images
-batch_size = args.batch_size
-confidence = args.confidence
-nms_threshold = args.nms_threshold
-start = 0
-CUDA = torch.cuda.is_available()
+if __name__ == '__main__':
+    args = arg_parse()
+    images = args.images
+    batch_size = args.batch_size
+    confidence = args.confidence
+    nms_threshold = args.nms_threshold
+    start = 0
+    CUDA = torch.cuda.is_available()
 
-num_classes = 80    #For COCO
-classes = load_classes(args.objects)
+    num_classes = 80    #For COCO
+    classes = load_classes(args.objects)
 
-model = YoloV3(args.cfg)
-model.load_weights(args.weightsfile)
+    model = YoloV3(args.cfg)
+    model.load_weights(args.weightsfile)
 
-model.net_info["height"] = args.resolution
-input_dim = int(model.net_info["height"])
-assert input_dim % 32 == 0
-assert input_dim > 32
+    model.net_info["height"] = args.resolution
+    input_dim = int(model.net_info["height"])
+    assert input_dim % 32 == 0
+    assert input_dim > 32
 
-# If there's a GPU available, put the model on GPU
-if CUDA:
-    model.cuda()
-# Set the model in evaluation mode
-model.eval()
+    # If there's a GPU available, put the model on GPU
+    if CUDA:
+        model.cuda()
+    # Set the model in evaluation mode
+    model.eval()
 
-train_dataset = get_dataset('coco', datapath=args.images, mode=TRAIN, transforms=get_transform(True, args))
-val_dataset = get_dataset('coco', datapath=args.images, mode=VALIDATION, transforms=get_transform(False, args))
-test_dataset = get_dataset('coco', datapath=args.images, mode=TEST, transforms=get_transform(False, args))
+    train_dataset = get_dataset('coco', datapath=args.images, mode=TRAIN, transforms=get_transform(True, args))
+    val_dataset = get_dataset('coco', datapath=args.images, mode=VALIDATION, transforms=get_transform(False, args))
+    test_dataset = get_dataset('coco', datapath=args.images, mode=TEST, transforms=get_transform(False, args))
 
-train_loader = DataLoader(dataset=train_dataset, num_workers=args.workers, shuffle=True)
-val_loader = DataLoader(dataset=test_dataset, num_workers=args.workers, shuffle=False)
-test_loader = DataLoader(dataset=test_dataset, num_workers=args.workers, shuffle=False)
+    train_loader = DataLoader(dataset=train_dataset, num_workers=args.workers, shuffle=True)
+    val_loader = DataLoader(dataset=val_dataset, num_workers=args.workers, shuffle=False)
+    test_loader = DataLoader(dataset=test_dataset, num_workers=args.workers, shuffle=False)
 
 

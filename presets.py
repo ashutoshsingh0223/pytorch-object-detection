@@ -11,7 +11,7 @@ class DetectionPresetTrain():
         pass
 
 
-class DetectionPresetTrainResize():
+class DetectionPresetTrainResize:
     def __init__(self, *, size: Tuple[int, int],
                  padding_color: Tuple[int, int, int] = (128, 128, 128), hflip_prob: float = 0.5,
                  mean: Tuple[float, float, float] = (123.0, 117.0, 104.0), data_augmentation: str = 'default'):
@@ -20,7 +20,8 @@ class DetectionPresetTrainResize():
             self.transforms = T.Compose(
                 [
                     T.ResizeImageAspectRatioPreserve(size=size, padding_color=padding_color),
-                    T.PILToTensor()
+                    T.PILToTensor(),
+                    T.ConvertImageDtype()
                 ]
             )
 
@@ -32,7 +33,8 @@ class DetectionPresetEval:
     def __init__(self):
         self.transforms = T.Compose(
             [
-                T.PILToTensor()
+                T.PILToTensor(),
+                T.ConvertImageDtype()
             ]
         )
 
@@ -45,7 +47,8 @@ class DetectionPresetEvalResize:
         self.transforms = T.Compose(
             [
                 T.ResizeImageAspectRatioPreserve(size=size, padding_color=padding_color),
-                T.PILToTensor()
+                T.PILToTensor(),
+                T.ConvertImageDtype()
             ]
         )
 

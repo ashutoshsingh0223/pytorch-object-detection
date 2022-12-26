@@ -84,9 +84,25 @@ class CocoDetection(VisionDataset):
 
         else:
             image = self._load_images_from_dir(index)
-            target = None
+            target = {}
 
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
         return image, target
+
+    def __len__(self):
+        if self.coco:
+            return len(self.ids)
+        else:
+            return len(self.paths)
+
+# from yolo_detector import *
+# from argparse import Namespace
+#
+# args = Namespace()
+# args.data_augmentation = 'default'
+# args.resolution = 416
+#
+# val_dataset = get_dataset('coco', datapath=('/home/AD.IGD.FRAUNHOFER.DE/sashutosh/pytorch-object-detection/test_images'), mode=VALIDATION, transforms=get_transform(False, args))
+# val_loader = DataLoader(dataset=val_dataset, num_workers=2, shuffle=False, batch_size=1)
