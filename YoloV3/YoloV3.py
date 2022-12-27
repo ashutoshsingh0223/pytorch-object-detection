@@ -18,10 +18,10 @@ class YoloV3(nn.Module):
         self.blocks = parse_yolo_config(config_path)
         self.net_info, self.module_list = get_layers_from_blocks(blocks=self.blocks)
 
-    def forward(self, x, target: Optional[Dict[str, Any]] = None, cuda: bool = True):
+    def forward(self, x, target: Optional[Dict[str, Any]] = None, device: str = torch.device('cpu')):
         modules = self.blocks[1:]
         # Catch outputs for route layer
-        outputs = []
+        outputs = {}
 
         write = False
         for i, module in enumerate(modules):
@@ -34,7 +34,7 @@ class YoloV3(nn.Module):
                 _layers = module['layers']
 
                 if isinstance(_layers, int):
-                    end = 0
+                    end = None
                     start = _layers
                 else:
                     _layers = _layers.split(',')
@@ -43,11 +43,11 @@ class YoloV3(nn.Module):
 
                 if start > 0:
                     start = start - i
-                if end > 0:
-                    end = end - i
+                if end is not None:
+                    end = end - i if end > 0 else end
 
-                if end < 0:
-                    x = torch.cat((outputs[i + start] + outputs[i + end]), dim=1)
+                if end:
+                    x = torch.cat((outputs[i + start], outputs[i + end]), dim=1)
                 else:
                     x = outputs[i + start]
             elif type_ == 'shortcut':
@@ -64,15 +64,15 @@ class YoloV3(nn.Module):
                 num_classes = int(module["classes"])
 
                 x = x.data
-                x = predict_transform(x, inp_dim, anchors, num_classes, cuda)
+                x = predict_transform(x, inp_dim, anchors, num_classes, device)
 
                 if not write:
                     detections = x
                     write = True
                 else:
-                    detections = torch.cat((detections, x), 0)
+                    detections = torch.cat((detections, x), 1)
 
-            outputs.append(x)
+            outputs[i] = x
 
         return detections
 
@@ -123,10 +123,10 @@ class YoloV3(nn.Module):
                     bn_running_var = bn_running_var.view_as(bn.running_var)
 
                     # Copy the data to model
-                    bn.bias.data.copy_(bn_biases)
-                    bn.weight.data.copy_(bn_weights)
-                    bn.running_mean.copy_(bn_running_mean)
-                    bn.running_var.copy_(bn_running_var)
+                    self.module_list[i].block[1].bias.data.copy_(bn_biases)
+                    self.module_list[i].block[1].weight.data.copy_(bn_weights)
+                    self.module_list[i].block[1].running_mean.copy_(bn_running_mean)
+                    self.module_list[i].block[1].running_var.copy_(bn_running_var)
 
                     # No conv bias if batch norm for YOLOV3
                 else:
@@ -141,7 +141,7 @@ class YoloV3(nn.Module):
                     conv_biases = conv_biases.view_as(conv.bias.data)
 
                     # Finally copy the data
-                    conv.bias.data.copy_(conv_biases)
+                    self.module_list[i].block[0].bias.data.copy_(conv_biases)
 
                 # Load conv weights
                 num_weights = conv.weight.numel()
@@ -149,6 +149,5 @@ class YoloV3(nn.Module):
                 # Do the same as above for weights
                 conv_weights = torch.from_numpy(weights[ptr:ptr + num_weights])
                 ptr = ptr + num_weights
-
                 conv_weights = conv_weights.view_as(conv.weight.data)
-                conv.weight.data.copy_(conv_weights)
+                self.module_list[i].block[0].weight.data.copy_(conv_weights)

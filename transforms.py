@@ -1,6 +1,9 @@
 from typing import List, Dict, Optional, Tuple
 
 from PIL import Image
+import cv2
+
+import numpy as np
 
 import torch
 from torch import nn, Tensor
@@ -19,6 +22,7 @@ def resize(image: 'Image', size: Tuple[int, int], padding_color: Tuple[int, int,
     image = image.resize((new_w, new_h), resample=Image.Resampling.BICUBIC)
     padded_image = Image.new(image.mode, (w, h), padding_color)
 
+    # This abs is not required you could just write ((w - new_w) / 2)
     left = abs((new_w - w) // 2)
     top = abs((new_h - h) // 2)
     padded_image.paste(image, (left, top))
@@ -69,8 +73,35 @@ class ResizeImageAspectRatioPreserve(nn.Module):
 
     def forward(self, image: 'Image', target: Optional[Dict[str, 'Tensor']] = None) -> Tuple[
         'Image', Optional[Dict[str, Tensor]]]:
-        padded_image = resize(image, self.size, self.padding_color)
-        return padded_image, target
+
+        # padded_image = resize(image, self.size, self.padding_color)
+        def letterbox_image(img, inp_dim):
+            '''resize image with unchanged aspect ratio using padding'''
+            img_w, img_h = img.shape[1], img.shape[0]
+            w, h = inp_dim
+            new_w = int(img_w * min(w / img_w, h / img_h))
+            new_h = int(img_h * min(w / img_w, h / img_h))
+            resized_image = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+            canvas = np.full((inp_dim[1], inp_dim[0], 3), 128)
+
+            canvas[(h - new_h) // 2:(h - new_h) // 2 + new_h, (w - new_w) // 2:(w - new_w) // 2 + new_w,
+            :] = resized_image
+
+            return canvas
+
+        def prep_image(img, inp_dim):
+            """
+            Prepare image for inputting to the neural network.
+
+            Returns a Variable
+            """
+            img = letterbox_image(img, (inp_dim, inp_dim))
+            img = img[:, :, ::-1].transpose((2, 0, 1)).copy()
+            img = torch.from_numpy(img).float().div(255.0)
+            return img
+        img = prep_image(image, 416)
+        return img, target
 
 
 class Compose:

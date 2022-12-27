@@ -2,6 +2,7 @@ from typing import Union, Any, List, Optional, Callable, Tuple
 from pathlib import Path
 
 from PIL import Image
+import cv2
 
 from torchvision.datasets import VisionDataset
 
@@ -56,6 +57,8 @@ class CocoDetection(VisionDataset):
 
         self.images_dir: 'Path' = Path(images_dir)
 
+        self.images_dim = []
+
         if annotations_file:
             self.coco = COCO(annotations_file)
             self.ids = list(sorted(self.coco.imgs.keys()))
@@ -68,13 +71,32 @@ class CocoDetection(VisionDataset):
 
     def _load_image(self, _id: int) -> Image.Image:
         path = self.coco.loadImgs(_id)[0]["file_name"]
-        return Image.open(str(Path(self.root) / path)).convert("RGB")
+        return Image.open(str(Path(self.root) / path))
 
     def _load_target(self, _id: int) -> List[Any]:
         return self.coco.loadAnns(self.coco.getAnnIds(_id))
 
     def _load_images_from_dir(self, index: int) -> Image.Image:
-        return Image.open(str(self.paths[index]))
+        return cv2.imread(str(self.paths[index]))
+        # return Image.open(str(self.paths[index]))
+
+    def get_img_path(self, index: int) -> Union['Path', str]:
+        if self.coco:
+            _id = self.ids[index]
+            path = self.coco.loadImgs(_id)[0]["file_name"]
+            return Path(self.root) / path
+        else:
+            return self.paths[index]
+
+    def get_img_dim(self, index: int) -> Tuple[int, int]:
+        if not self.images_dim:
+            if self.coco:
+                self.images_dim = [Image.open(Path(self.root) / self.coco.loadImgs(_id)[0]["file_name"]).size
+                                   for _id in self.ids]
+            else:
+                self.images_dim = [Image.open(p).size for p in self.paths]
+
+        return self.images_dim[index]
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         if self.coco:

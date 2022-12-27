@@ -73,7 +73,7 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
 
             # Conv bias is set to false if batch norm present
             module_block = Conv2DBlock(in_channels, out_channels, kernel_size,
-                                       padding, stride, batch_norm, activation, conv_bias=not batch_norm)
+                                       stride, padding, batch_norm, activation, conv_bias=not batch_norm)
         elif type_ == 'shortcut':
             module_block.add_module(f'shortcut_{index}', EmptyLayer())
 

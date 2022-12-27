@@ -1,9 +1,6 @@
 from typing import List, Tuple
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
 
 from torchvision.ops import box_iou
 
@@ -13,7 +10,7 @@ from utils import unique
 
 
 def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[Tuple[int, int]], num_classes: int,
-                      cuda: bool = True):
+                      device):
 
     batch_size = prediction.shape[0]
     stride = input_dim // prediction.shape[2]
@@ -48,8 +45,7 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     prediction[:, :, :2] += offsets
 
     anchors = torch.FloatTensor(anchors)
-    if cuda:
-        anchors = anchors.cuda()
+    anchors = anchors.to(device)
 
     # Log space transform for height and width
     anchors = anchors.repeat(grid_size * grid_size, 1).unsqueeze(0)
@@ -64,10 +60,9 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     return prediction
 
 
-def transform_detections(predictions: 'Tensor', confidence: float, num_classes: int, nms_threshold: float = 0.4):
+def transform_detections(predictions: 'torch.Tensor', confidence: float, num_classes: int, nms_threshold: float = 0.4):
     conf_mask = (predictions[:, :, 4] > confidence).float().unsqueeze(2)
     predictions = predictions * conf_mask
-
     # We have bbox in tuples like (centre_x, centre_y, width, height) but it's easier to calculate IoU
     # if we have lower left co-ordinate and upper right co-ordinate of the box
     box_corner = predictions.new(predictions.shape)
@@ -84,13 +79,13 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
     for ind in range(batch_size):
         image_pred = predictions[ind]
         # Out of 80 classes keep the class index with max score along with its score
-        max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keep_dim=True)
+        max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keepdim=True)
         max_conf_score = max_conf_score.float()
         max_conf_index = max_conf_index.float()
         seq = (image_pred[:, :5], max_conf_score, max_conf_index)
         image_pred = torch.cat(seq, 1)
         # Let's remove the bounding boxes we had set to zero by using 'confidence' or objectness score
-        non_zero = torch.non_zero(image_pred[:, 4])
+        non_zero = torch.nonzero(image_pred[:, 4])
         # 7 becuase of 5 bbox attrs and 1 each for max class index and corresponding score
 
         try:
@@ -124,7 +119,7 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
                 # Calculate iou between current bounding bbox and all subsequent bboxes for this class
                 try:
                     # ious.shape == [1, len(image_pred_class[i + 1:])]
-                    ious = box_iou(image_pred_class[i].unsqueeze(0), image_pred_class[i + 1:])
+                    ious = box_iou(image_pred_class[i, :4].unsqueeze(0), image_pred_class[i + 1:, :4])
 
                 except ValueError:
                     # To handle ValueError when image_pred_class[i + 1:] is an empty tensor
@@ -141,8 +136,8 @@ def transform_detections(predictions: 'Tensor', confidence: float, num_classes: 
 
                 # "If we have two bounding boxes of the same class having an IoU larger than a threshold,
                 # then the one with lower class confidence is eliminated"
-                iou_mask = (ious < nms_threshold).float().unsqueeze(1)
-                image_pred_class[i + 1:] *= iou_mask
+                iou_mask = (ious < nms_threshold).float()
+                image_pred_class[i + 1:] *= iou_mask.transpose(1, 0)
 
                 # Now remove the entries that were set to zero.
                 non_zero_ind = torch.nonzero(image_pred_class[:, 4]).squeeze()

@@ -6,7 +6,7 @@ from torch import Tensor
 import transforms as T
 
 
-class DetectionPresetTrain():
+class DetectionPresetTrain:
     def __init__(self, *, data_augmentation, hflip_prob=0.5, mean=(123.0, 117.0, 104.0)):
         pass
 
@@ -20,8 +20,8 @@ class DetectionPresetTrainResize:
             self.transforms = T.Compose(
                 [
                     T.ResizeImageAspectRatioPreserve(size=size, padding_color=padding_color),
-                    T.PILToTensor(),
-                    T.ConvertImageDtype()
+                    # T.PILToTensor(),
+                    # T.ConvertImageDtype()
                 ]
             )
 
@@ -47,8 +47,8 @@ class DetectionPresetEvalResize:
         self.transforms = T.Compose(
             [
                 T.ResizeImageAspectRatioPreserve(size=size, padding_color=padding_color),
-                T.PILToTensor(),
-                T.ConvertImageDtype()
+                # T.PILToTensor(),
+                # T.ConvertImageDtype()
             ]
         )
 
