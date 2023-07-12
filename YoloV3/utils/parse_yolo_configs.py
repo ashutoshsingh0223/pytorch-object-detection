@@ -71,7 +71,7 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
             except:
                 padding = 0
 
-            # Conv bias is set to false if batch norm present
+            # Conv bias is set to false if batch norm present, since bias is cancelled when mean is subtracted.
             module_block = Conv2DBlock(in_channels, out_channels, kernel_size,
                                        stride, padding, batch_norm, activation, conv_bias=not batch_norm)
         elif type_ == 'shortcut':
@@ -115,7 +115,7 @@ def get_layers_from_blocks(blocks: List[Dict[str, Any]]) -> Tuple[Dict[str, Any]
             anchors = [int(a.strip()) for a in block['anchors'].split(',')]
             anchors = [(anchors[i], anchors[i+1]) for i in range(0, len(anchors), 2)]
             anchors = [anchors[i] for i in masks]
-            module_block.add_module(f'detection_{index}', DetectionLayer(anchors=anchors))
+            module_block.add_module(f'detection_{index}', DetectionLayer(anchors=anchors, classes=block['classes']))
 
         in_channels = out_channels
         out_channels_list.append(out_channels)

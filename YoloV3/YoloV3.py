@@ -8,6 +8,7 @@ import numpy as np
 
 from YoloV3.utils.parse_yolo_configs import get_layers_from_blocks, parse_yolo_config
 from YoloV3.utils import predict_transform
+from YoloV3.layers import DetectionLayer
 
 
 class YoloV3(nn.Module):
@@ -17,6 +18,9 @@ class YoloV3(nn.Module):
 
         self.blocks = parse_yolo_config(config_path)
         self.net_info, self.module_list = get_layers_from_blocks(blocks=self.blocks)
+
+        self.yolo_layers = [layer[0]
+                            for layer in self.module_list if isinstance(layer[0], DetectionLayer)]
 
     def forward(self, x, target: Optional[Dict[str, Any]] = None, device: str = torch.device('cpu')):
         modules = self.blocks[1:]
