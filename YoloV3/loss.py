@@ -78,16 +78,18 @@ def build_targets(
         # Now we need to find target to anchor association. Each target can be associated to one/multiple/no anchors
         # Get rid of anchor-target pairs where the divergence in their width or height is as big as `target_anchor_ratio`.
         # And lose the anchor dimention - the anchors are identified by the anchor-id appended to targets.
-        if num_targets:
-            r = t[:, :, 4:6] / anchors[:, None, :]
-            j = (
-                torch.max(r, 1 / r).max(2)[0] < hyperparams["target_anchor_ratio"]
-            )  # compare
-            t = t[j]
-        else:
-            t = targets[0]
+        # if num_targets:
+        #     r = t[:, :, 4:6] / anchors[:, None, :]
+        #     j = (
+        #         torch.max(r, 1 / r).max(2)[0] < hyperparams["target_anchor_ratio"]
+        #     )  # compare
+        #     t = t[j]
+        # else:
+        #     t = targets[0]
 
-        images_ids, classes = t[:, 0:1].long().T
+        t = t.reshape(-1, 7)
+
+        images_ids, classes = t[:, 0:2].long().T
 
         # Actual coordinates and wh values in feature map space
         xy = t[:, 2:4]
@@ -105,8 +107,8 @@ def build_targets(
             (
                 images_ids,
                 a_ids,
-                j.clamp_(0, scale[3].long() - 1),
-                i.clamp_(0, scale[2].long() - 1),
+                j.clamp_(0, scale[3].long() - 1).long(),
+                i.clamp_(0, scale[2].long() - 1).long(),
             )
         )
 

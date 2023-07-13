@@ -74,15 +74,18 @@ def get_layers_from_blocks(
                 padding = 0
 
             # Conv bias is set to false if batch norm present
-            module_block = Conv2DBlock(
-                in_channels,
-                out_channels,
-                kernel_size,
-                stride,
-                padding,
-                batch_norm,
-                activation,
-                conv_bias=not batch_norm,
+            module_block.add_module(
+                f"convolutional_{index}",
+                Conv2DBlock(
+                    in_channels,
+                    out_channels,
+                    kernel_size,
+                    stride,
+                    padding,
+                    batch_norm,
+                    activation,
+                    conv_bias=not batch_norm,
+                ),
             )
         elif type_ == "shortcut":
             module_block.add_module(f"shortcut_{index}", EmptyLayer())

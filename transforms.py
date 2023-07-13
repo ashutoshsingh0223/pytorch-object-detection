@@ -11,7 +11,11 @@ from torch import nn, Tensor
 from torchvision.transforms import functional as F, InterpolationMode, transforms as T
 
 
-def resize(image: 'Image', size: Tuple[int, int], padding_color: Tuple[int, int, int] = (128, 128, 128)):
+def resize(
+    image: "Image",
+    size: Tuple[int, int],
+    padding_color: Tuple[int, int, int] = (128, 128, 128),
+):
     im_width, im_height = image.size
     w, h = size
 
@@ -31,8 +35,9 @@ def resize(image: 'Image', size: Tuple[int, int], padding_color: Tuple[int, int,
 
 
 class PILToTensor(nn.Module):
-    def forward(self, image: 'Image',
-                target: Optional[Dict[str, 'Tensor']] = None) -> Tuple['Tensor', Optional[Dict[str, 'Tensor']]]:
+    def forward(
+        self, image: "Image", target: Optional[Dict[str, "Tensor"]] = None
+    ) -> Tuple["Tensor", Optional[Dict[str, "Tensor"]]]:
         image = F.pil_to_tensor(image)
         return image, target
 
@@ -64,29 +69,37 @@ class ConvertImageDtype(nn.Module):
 
 
 class ResizeImageAspectRatioPreserve(nn.Module):
-
-    def __init__(self, size: Tuple[int, int], padding_color: Tuple[int, int, int] = (128, 128, 128)):
+    def __init__(
+        self,
+        size: Tuple[int, int],
+        padding_color: Tuple[int, int, int] = (128, 128, 128),
+    ):
         super(ResizeImageAspectRatioPreserve, self).__init__()
 
         self.size = size
         self.padding_color = padding_color
 
-    def forward(self, image: 'Image', target: Optional[Dict[str, 'Tensor']] = None) -> Tuple[
-        'Image', Optional[Dict[str, Tensor]]]:
-
+    def forward(
+        self, image: Image.Image, target: Optional[Dict[str, "Tensor"]] = None
+    ) -> Tuple[Image.Image, Optional[Dict[str, Tensor]]]:
         # padded_image = resize(image, self.size, self.padding_color)
         def letterbox_image(img, inp_dim):
-            '''resize image with unchanged aspect ratio using padding'''
+            """resize image with unchanged aspect ratio using padding"""
             img_w, img_h = img.shape[1], img.shape[0]
             w, h = inp_dim
             new_w = int(img_w * min(w / img_w, h / img_h))
             new_h = int(img_h * min(w / img_w, h / img_h))
-            resized_image = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+            resized_image = cv2.resize(
+                img, (new_w, new_h), interpolation=cv2.INTER_CUBIC
+            )
 
             canvas = np.full((inp_dim[1], inp_dim[0], 3), 128)
 
-            canvas[(h - new_h) // 2:(h - new_h) // 2 + new_h, (w - new_w) // 2:(w - new_w) // 2 + new_w,
-            :] = resized_image
+            canvas[
+                (h - new_h) // 2 : (h - new_h) // 2 + new_h,
+                (w - new_w) // 2 : (w - new_w) // 2 + new_w,
+                :,
+            ] = resized_image
 
             return canvas
 
@@ -96,10 +109,12 @@ class ResizeImageAspectRatioPreserve(nn.Module):
 
             Returns a Variable
             """
+            img = np.array(img)
             img = letterbox_image(img, (inp_dim, inp_dim))
             img = img[:, :, ::-1].transpose((2, 0, 1)).copy()
             img = torch.from_numpy(img).float().div(255.0)
             return img
+
         img = prep_image(image, 416)
         return img, target
 
@@ -108,8 +123,9 @@ class Compose:
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image: 'Image', target: Optional[Dict[str, 'Tensor']]
-                 ) -> Tuple['Tensor', Optional[Dict[str, 'Tensor']]]:
+    def __call__(
+        self, image: "Image", target: Optional[Dict[str, "Tensor"]]
+    ) -> Tuple["Tensor", Optional[Dict[str, "Tensor"]]]:
         for t in self.transforms:
             image, target = t(image, target)
         return image, target
