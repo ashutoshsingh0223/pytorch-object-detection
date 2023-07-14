@@ -51,6 +51,7 @@ class CocoDetection(VisionDataset):
             transform: Optional[Callable] = None,
             target_transform: Optional[Callable] = None,
             transforms: Optional[Callable] = None,
+            yolo: bool = False
     ) -> None:
         super().__init__(images_dir, transforms, transform, target_transform)
         from pycocotools.coco import COCO
@@ -69,6 +70,7 @@ class CocoDetection(VisionDataset):
             # If annotations file is not specified take all the paths from image_dir
             self.paths = [x for x in self.images_dir.glob('**/*') if x.is_file()]
 
+    
     def _load_image(self, _id: int) -> Image.Image:
         path = self.coco.loadImgs(_id)[0]["file_name"]
         return Image.open(str(Path(self.root) / path))
@@ -77,7 +79,7 @@ class CocoDetection(VisionDataset):
         return self.coco.loadAnns(self.coco.getAnnIds(_id))
 
     def _load_images_from_dir(self, index: int) -> Image.Image:
-        return cv2.imread(str(self.paths[index]))
+        return Image.open(str(self.paths[index]))
         # return Image.open(str(self.paths[index]))
 
     def get_img_path(self, index: int) -> Union['Path', str]:

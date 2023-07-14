@@ -7,7 +7,6 @@ import torchvision
 def calculate_iou_loss(
     target_boxes: torch.Tensor,
     predicted_boxes: torch.Tensor,
-    device="cpu",
     ciou: bool = False,
     giou: bool = False,
 ):
@@ -17,9 +16,6 @@ def calculate_iou_loss(
         loss = torchvision.ops.giou_loss(predicted_boxes, target_boxes)
     else:
         loss = 1 - torchvision.ops.box_iou(predicted_boxes, target_boxes)
-
-    loss = loss.to(device)
-    loss.requires_grad = True
 
     return loss
 
@@ -31,8 +27,6 @@ def build_targets(
     hyperparams: Dict[str, Any],
 ):
     """
-    1. for each yolo detection layer
-
     Args:
         predictions (List[torch.Tensor]): _description_
         targets (torch.Tensor): _description_
@@ -77,17 +71,18 @@ def build_targets(
 
         # Now we need to find target to anchor association. Each target can be associated to one/multiple/no anchors
         # Get rid of anchor-target pairs where the divergence in their width or height is as big as `target_anchor_ratio`.
-        # And lose the anchor dimention - the anchors are identified by the anchor-id appended to targets.
-        # if num_targets:
-        #     r = t[:, :, 4:6] / anchors[:, None, :]
-        #     j = (
-        #         torch.max(r, 1 / r).max(2)[0] < hyperparams["target_anchor_ratio"]
-        #     )  # compare
-        #     t = t[j]
-        # else:
-        #     t = targets[0]
+        # And lose the anchor dimension - the anchors are identified by the anchor-id appended to targets.
+        if num_targets:
+            r = t[:, :, 4:6] / anchors[:, None, :]
+            j = (
+                torch.max(r, 1 / r).max(2)[0] < hyperparams["target_anchor_ratio"]
+            )
+            t = t[j]
+        else:
+            t = targets[0]
 
-        t = t.reshape(-1, 7)
+        # For testing
+        # t = t.reshape(-1, 7)
 
         images_ids, classes = t[:, 0:2].long().T
 
@@ -129,22 +124,61 @@ def calculate_loss(
 ):
     # shape(predictions) -> [batch, #anchors, grid_y, grid_x, #5+num_classes]
     # shape(targets) -> [batch, 6], ([img_id, class, x, y, w, h])
-    cls_loss = torch.nn.CrossEntropyLoss()
-    obj_loss = torch.nn.BCEWithLogitsLoss()
+    cls_loss_criterion = torch.nn.BCEWithLogitsLoss(pos_weight=[1.0])
+    obj_loss_criterion = torch.nn.BCEWithLogitsLoss(pos_weight=[1.0])
+
+    device = targets.device
+    cls_loss, box_loss, objectness_loss = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
+
+    objectness_targets = torch.zeros_like(predictions[0][])
 
     t_indices, t_boxes, t_anchors, t_classes = build_targets(
         predictions, targets, model, hyperparams
     )
 
     for layer_idx, layer_predictions in enumerate(predictions):
+        objectness_targets = torch.zeros_like(layer_predictions[..., 0], device=device)
+
         layer_t_indices, layer_t_boxes = t_indices[layer_idx], t_boxes[layer_idx]
-        layer_t_anchors, layer_t_classes = t_anchors[layer_idx], t_boxes[layer_idx]
+        layer_t_anchors, layer_t_classes = t_anchors[layer_idx], t_classes[layer_idx]
 
         image_ids, anch_ids, j, i = layer_t_indices
-        predicted_box = layer_predictions[image_ids, anch_ids, j, i]
+        
+        num_targets = image_ids.shape[0]
+        
+        if num_targets:
+            predicted_box = layer_predictions[image_ids, anch_ids, j, i]
 
-        # Sigmoid to predicted x, y offsets.
-        predicted_xy = predicted_box[:, 0:2].sigmoid()
-        predcited_wh = torch.exp(predicted_box[:, 2:4]) * layer_t_anchors
+            # Sigmoid to predicted x, y offsets.
+            predicted_xy = predicted_box[:, 0:2].sigmoid()
+            predcited_wh = torch.exp(predicted_box[:, 2:4]) * layer_t_anchors
 
-        predicted_box = torch.cat((predicted_xy, predcited_wh), 1)
+            pbox = torch.cat((predicted_xy, predcited_wh), 1)
+
+
+            bbox_loss = calculate_iou_loss(predicted_boxes=pbox, target_boxes=layer_t_boxes, ciou=True)
+
+            box_loss += bbox_loss.mean()
+
+            iou = 1 - bbox_loss
+            iou = iou.detach()
+
+            # See objectnes vales for all grid locations for corresponding anchors as iou where iou > 0
+            objectness_targets[image_ids, anch_ids, j, i] = iou.clamp(0).to(dtype=objectness_targets.dtype)
+
+            # If number of classes is greater than 1 calculate classification loss
+            if predicted_box.shape[1] - 5 > 1:
+                cls_targets = torch.nn.functional.one_hot(layer_t_classes, num_classes=predicted_box.shape[1] - 5).to(device=device)
+                cls_loss += cls_loss_criterion(predicted_box[:, 5:], cls_targets)
+
+        # Objectness loss
+        objectness_loss += obj_loss_criterion(layer_predictions[..., 4], objectness_targets)
+
+        box_loss *= hyperparams['weight_box_loss']
+        cls_loss *= hyperparams['weight_classification_loss']
+        objectness_loss *= hyperparams['weight_objectness_loss']
+
+        loss = box_loss + cls_loss + objectness_loss
+
+        return loss, torch.cat((box_loss, objectness_loss, cls_loss)).detach().cpu()
+    

@@ -8,11 +8,12 @@ import numpy as np
 import torch
 from torch import nn, Tensor
 
-from torchvision.transforms import functional as F, InterpolationMode, transforms as T
+from torchvision.transforms import functional as F, transforms as T
+
 
 
 def resize(
-    image: "Image",
+    image: Image.Image,
     size: Tuple[int, int],
     padding_color: Tuple[int, int, int] = (128, 128, 128),
 ):
@@ -23,7 +24,7 @@ def resize(
     new_w = int(im_width * scale_factor)
     new_h = int(im_height * scale_factor)
 
-    image = image.resize((new_w, new_h), resample=Image.Resampling.BICUBIC)
+    image = image.resize((new_w, new_h), resample=Image.Resampling.CUBIC)
     padded_image = Image.new(image.mode, (w, h), padding_color)
 
     # This abs is not required you could just write ((w - new_w) / 2)
@@ -34,10 +35,37 @@ def resize(
     return padded_image
 
 
+
+class AbsoluteBoxes(nn.Module):
+
+    def __init_(self):
+        pass
+
+    def forward(self, image: Tensor, target: Optional[Dict[str, Tensor]] = None):
+        if target is not None:
+            relative_boxes = target['boxes']
+            scale = torch.tensor(image.shape)[[2, 1, 2, 1]]
+            target['boxes'] = relative_boxes * scale
+        return image, target
+    
+
+
+class RelativeBoxes(nn.Module):
+    def __init_(self):
+        pass
+
+    def forward(self, image: Tensor, target: Optional[Dict[str, Tensor]] = None):
+        if target is not None:
+            absolute_boxes = target['boxes']
+            scale = torch.tensor(image.shape)[[2, 1, 2, 1]]
+            target['boxes'] = absolute_boxes / scale
+        return image, target
+
+
 class PILToTensor(nn.Module):
     def forward(
-        self, image: "Image", target: Optional[Dict[str, "Tensor"]] = None
-    ) -> Tuple["Tensor", Optional[Dict[str, "Tensor"]]]:
+        self, image: Image.Image, target: Optional[Dict[str, Tensor]] = None
+    ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
         image = F.pil_to_tensor(image)
         return image, target
 
@@ -54,20 +82,6 @@ class ConvertImageDtype(nn.Module):
         return image, target
 
 
-# Already managed by ConvertImageDtype
-
-# class ScaleImage(nn.Module):
-#     def __init__(self, scale: float = 255.0) -> None:
-#         super().__init__()
-#         self.scale = scale
-#
-#     def forward(
-#         self, image: Tensor, target: Optional[Dict[str, Tensor]] = None
-#     ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
-#         image = image.div(self.scale)
-#         return image, target
-
-
 class ResizeImageAspectRatioPreserve(nn.Module):
     def __init__(
         self,
@@ -80,7 +94,7 @@ class ResizeImageAspectRatioPreserve(nn.Module):
         self.padding_color = padding_color
 
     def forward(
-        self, image: Image.Image, target: Optional[Dict[str, "Tensor"]] = None
+        self, image: Image.Image, target: Optional[Dict[str, Tensor]] = None
     ) -> Tuple[Image.Image, Optional[Dict[str, Tensor]]]:
         # padded_image = resize(image, self.size, self.padding_color)
         def letterbox_image(img, inp_dim):
@@ -124,8 +138,8 @@ class Compose:
         self.transforms = transforms
 
     def __call__(
-        self, image: "Image", target: Optional[Dict[str, "Tensor"]]
-    ) -> Tuple["Tensor", Optional[Dict[str, "Tensor"]]]:
+        self, image: Image.Image, target: Optional[Dict[str, Tensor]]
+    ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
         for t in self.transforms:
             image, target = t(image, target)
         return image, target
