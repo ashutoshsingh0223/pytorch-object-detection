@@ -74,8 +74,8 @@ def build_targets(
         # And lose the anchor dimension - the anchors are identified by the anchor-id appended to targets.
         if num_targets:
             r = t[:, :, 4:6] / anchors[:, None, :]
-            j = (
-                torch.max(r, 1 / r).max(2)[0] < hyperparams["target_anchor_ratio"]
+            j = torch.max(r, 1 / r).max(2)[0] < hyperparams.get(
+                "target_anchor_ratio", 4
             )
             t = t[j]
         else:
@@ -121,16 +121,18 @@ def calculate_loss(
     targets: torch.Tensor,
     model: torch.nn.Module,
     hyperparams: Dict[str, Any],
-):
+) -> Dict[str, torch.Tensor]:
     # shape(predictions) -> [batch, #anchors, grid_y, grid_x, #5+num_classes]
     # shape(targets) -> [batch, 6], ([img_id, class, x, y, w, h])
     cls_loss_criterion = torch.nn.BCEWithLogitsLoss(pos_weight=[1.0])
     obj_loss_criterion = torch.nn.BCEWithLogitsLoss(pos_weight=[1.0])
 
     device = targets.device
-    cls_loss, box_loss, objectness_loss = torch.zeros(1, device=device), torch.zeros(1, device=device), torch.zeros(1, device=device)
-
-    objectness_targets = torch.zeros_like(predictions[0][])
+    cls_loss, box_loss, objectness_loss = (
+        torch.zeros(1, device=device),
+        torch.zeros(1, device=device),
+        torch.zeros(1, device=device),
+    )
 
     t_indices, t_boxes, t_anchors, t_classes = build_targets(
         predictions, targets, model, hyperparams
@@ -143,9 +145,9 @@ def calculate_loss(
         layer_t_anchors, layer_t_classes = t_anchors[layer_idx], t_classes[layer_idx]
 
         image_ids, anch_ids, j, i = layer_t_indices
-        
+
         num_targets = image_ids.shape[0]
-        
+
         if num_targets:
             predicted_box = layer_predictions[image_ids, anch_ids, j, i]
 
@@ -155,8 +157,9 @@ def calculate_loss(
 
             pbox = torch.cat((predicted_xy, predcited_wh), 1)
 
-
-            bbox_loss = calculate_iou_loss(predicted_boxes=pbox, target_boxes=layer_t_boxes, ciou=True)
+            bbox_loss = calculate_iou_loss(
+                predicted_boxes=pbox, target_boxes=layer_t_boxes, ciou=True
+            )
 
             box_loss += bbox_loss.mean()
 
@@ -164,21 +167,29 @@ def calculate_loss(
             iou = iou.detach()
 
             # See objectnes vales for all grid locations for corresponding anchors as iou where iou > 0
-            objectness_targets[image_ids, anch_ids, j, i] = iou.clamp(0).to(dtype=objectness_targets.dtype)
+            objectness_targets[image_ids, anch_ids, j, i] = iou.clamp(0).to(
+                dtype=objectness_targets.dtype
+            )
 
             # If number of classes is greater than 1 calculate classification loss
             if predicted_box.shape[1] - 5 > 1:
-                cls_targets = torch.nn.functional.one_hot(layer_t_classes, num_classes=predicted_box.shape[1] - 5).to(device=device)
+                cls_targets = torch.nn.functional.one_hot(
+                    layer_t_classes, num_classes=predicted_box.shape[1] - 5
+                ).to(device=device)
                 cls_loss += cls_loss_criterion(predicted_box[:, 5:], cls_targets)
 
         # Objectness loss
-        objectness_loss += obj_loss_criterion(layer_predictions[..., 4], objectness_targets)
+        objectness_loss += obj_loss_criterion(
+            layer_predictions[..., 4], objectness_targets
+        )
 
-        box_loss *= hyperparams['weight_box_loss']
-        cls_loss *= hyperparams['weight_classification_loss']
-        objectness_loss *= hyperparams['weight_objectness_loss']
+        box_loss *= hyperparams.get("weight_box_loss", 0.05)
+        cls_loss *= hyperparams.get("weight_classification_loss", 0.5)
+        objectness_loss *= hyperparams.get("weight_objectness_loss", 1.0)
 
-        loss = box_loss + cls_loss + objectness_loss
-
-        return loss, torch.cat((box_loss, objectness_loss, cls_loss)).detach().cpu()
-    
+        losses = {
+            "box_loss": box_loss,
+            "cls_loss": cls_loss,
+            "objectness_loss": objectness_loss,
+        }
+        return losses

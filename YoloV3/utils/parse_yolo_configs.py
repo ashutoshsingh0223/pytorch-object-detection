@@ -4,8 +4,9 @@ from collections import OrderedDict
 
 import torch.nn as nn
 
-from blocks.conv_blocks import Conv2DBlock
+
 from YoloV3.layers import EmptyLayer, DetectionLayer
+from utils import get_activation_and_params
 
 
 activation_map_from_yolo = {
@@ -46,7 +47,7 @@ def parse_yolo_config(path: Union["Path", str]) -> List[Dict[str, Any]]:
 
 def get_layers_from_blocks(
     blocks: List[Dict[str, Any]]
-) -> Tuple[Dict[str, Any], "nn.ModuleList"]:
+) -> Tuple[Dict[str, Any], nn.ModuleList]:
     module_list = nn.ModuleList()
     in_channels: int = 3
     out_channels_list: List[int] = []
@@ -75,18 +76,33 @@ def get_layers_from_blocks(
 
             # Conv bias is set to false if batch norm present
             module_block.add_module(
-                f"convolutional_{index}",
-                Conv2DBlock(
-                    in_channels,
-                    out_channels,
-                    kernel_size,
-                    stride,
-                    padding,
-                    batch_norm,
-                    activation,
-                    conv_bias=not batch_norm,
+                f"convolutional_{0}",
+                nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
+                    padding_mode="zeros",
+                    bias=not batch_norm,
                 ),
             )
+
+            if batch_norm:
+                module_block.add_module(
+                    f"batchnorm_{0}",
+                    nn.BatchNorm2d(out_channels, momentum=0.1, eps=1e-5),
+                )
+
+            activation, default_activation_params = get_activation_and_params(
+                name=activation
+            )
+            if activation:
+                module_block.add_module(
+                    f"{block['activation']}_{0}",
+                    activation(**default_activation_params),
+                )
+
         elif type_ == "shortcut":
             module_block.add_module(f"shortcut_{index}", EmptyLayer())
 
@@ -109,9 +125,9 @@ def get_layers_from_blocks(
                 end = 0
 
             # Since route start layer index is always less than route layer index, the start number is always negative
-            # in case instead if relative negative index like -1(for previous layer) is replaced by actual layer index
-            # like 10(10th layer) ; like it's done for end layer this handling will help the downstream code to be
-            # consistent.
+            # in case instead of relative negative index like -1(for previous layer)
+            # actual layer index like 10(10th layer) ; like it's done for end layer the general code can break
+            # So convert index of start layer to relative index with current index as refernce.
             if start > 0:
                 start = start - index
             if end > 0:

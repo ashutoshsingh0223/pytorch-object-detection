@@ -9,21 +9,29 @@ import numpy as np
 from utils import unique
 
 
-def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[Tuple[int, int]], num_classes: int,
-                      device):
-
+def predict_transform(
+    prediction: torch.Tensor,
+    input_dim: int,
+    anchors: List[Tuple[int, int]],
+    num_classes: int,
+    device,
+):
     batch_size = prediction.shape[0]
     stride = input_dim // prediction.shape[2]
     grid_size = input_dim // stride
 
     bbox_attrs = 5 + num_classes
     num_anchors = len(anchors)
-    prediction = prediction.view(batch_size, bbox_attrs * num_anchors, grid_size * grid_size)
+    prediction = prediction.view(
+        batch_size, bbox_attrs * num_anchors, grid_size * grid_size
+    )
     prediction = prediction.transpose(1, 2).contiguous()
-    prediction = prediction.view(batch_size, grid_size * grid_size * num_anchors, bbox_attrs)
+    prediction = prediction.view(
+        batch_size, grid_size * grid_size * num_anchors, bbox_attrs
+    )
 
     # Changing scale of anchor box from image size to feature-map of grid_size
-    anchors = [(a[0]/stride, a[1]/stride) for a in anchors]
+    anchors = [(a[0] / stride, a[1] / stride) for a in anchors]
 
     # Sigmoid the centre x, y co-ords and objectness score
     prediction[:, :, 0] = torch.sigmoid(prediction[:, :, 0])
@@ -52,7 +60,9 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     prediction[:, :, 2:4] = torch.exp(prediction[:, :, 2:4]) * anchors
 
     # Sigmoid on class scores. One bounding box may predict different classes, hence no softmax.
-    prediction[:, :, 5: 5 + num_classes] = torch.sigmoid((prediction[:, :, 5: 5 + num_classes]))
+    prediction[:, :, 5 : 5 + num_classes] = torch.sigmoid(
+        (prediction[:, :, 5 : 5 + num_classes])
+    )
 
     # Scale the bbox attributes to fit the size of image from the size of feature map.
     # Example: feature map size = 13x13 and image size = 416x416 then stride = 32 = 416 // 13
@@ -60,16 +70,21 @@ def predict_transform(prediction: 'torch.Tensor', input_dim: int, anchors: List[
     return prediction
 
 
-def transform_detections(predictions: 'torch.Tensor', confidence: float, num_classes: int, nms_threshold: float = 0.4):
+def transform_detections(
+    predictions: torch.Tensor,
+    confidence: float = 0.5,
+    num_classes: int = 80,
+    nms_threshold: float = 0.4,
+):
     conf_mask = (predictions[:, :, 4] > confidence).float().unsqueeze(2)
     predictions = predictions * conf_mask
     # We have bbox in tuples like (centre_x, centre_y, width, height) but it's easier to calculate IoU
     # if we have lower left co-ordinate and upper right co-ordinate of the box
     box_corner = predictions.new(predictions.shape)
-    box_corner[:, :, 0] = (predictions[:, :, 0] - predictions[:, :, 2] / 2)
-    box_corner[:, :, 1] = (predictions[:, :, 1] - predictions[:, :, 3] / 2)
-    box_corner[:, :, 2] = (predictions[:, :, 0] + predictions[:, :, 2] / 2)
-    box_corner[:, :, 3] = (predictions[:, :, 1] + predictions[:, :, 3] / 2)
+    box_corner[:, :, 0] = predictions[:, :, 0] - predictions[:, :, 2] / 2
+    box_corner[:, :, 1] = predictions[:, :, 1] - predictions[:, :, 3] / 2
+    box_corner[:, :, 2] = predictions[:, :, 0] + predictions[:, :, 2] / 2
+    box_corner[:, :, 3] = predictions[:, :, 1] + predictions[:, :, 3] / 2
     predictions[:, :, :4] = box_corner[:, :, :4]
 
     batch_size = predictions.size(0)
@@ -79,7 +94,9 @@ def transform_detections(predictions: 'torch.Tensor', confidence: float, num_cla
     for ind in range(batch_size):
         image_pred = predictions[ind]
         # Out of 80 classes keep the class index with max score along with its score
-        max_conf_score, max_conf_index = torch.max(image_pred[:, 5:5 + num_classes], 1, keepdim=True)
+        max_conf_score, max_conf_index = torch.max(
+            image_pred[:, 5 : 5 + num_classes], 1, keepdim=True
+        )
         max_conf_score = max_conf_score.float()
         max_conf_index = max_conf_index.float()
         seq = (image_pred[:, :5], max_conf_score, max_conf_index)
@@ -119,7 +136,10 @@ def transform_detections(predictions: 'torch.Tensor', confidence: float, num_cla
                 # Calculate iou between current bounding bbox and all subsequent bboxes for this class
                 try:
                     # ious.shape == [1, len(image_pred_class[i + 1:])]
-                    ious = box_iou(image_pred_class[i, :4].unsqueeze(0), image_pred_class[i + 1:, :4])
+                    ious = box_iou(
+                        image_pred_class[i, :4].unsqueeze(0),
+                        image_pred_class[i + 1 :, :4],
+                    )
 
                 except ValueError:
                     # To handle ValueError when image_pred_class[i + 1:] is an empty tensor
@@ -137,7 +157,7 @@ def transform_detections(predictions: 'torch.Tensor', confidence: float, num_cla
                 # "If we have two bounding boxes of the same class having an IoU larger than a threshold,
                 # then the one with lower class confidence is eliminated"
                 iou_mask = (ious < nms_threshold).float()
-                image_pred_class[i + 1:] *= iou_mask.transpose(1, 0)
+                image_pred_class[i + 1 :] *= iou_mask.transpose(1, 0)
 
                 # Now remove the entries that were set to zero.
                 non_zero_ind = torch.nonzero(image_pred_class[:, 4]).squeeze()

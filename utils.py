@@ -18,31 +18,28 @@ def get_activation_and_params(name: str) -> Tuple[Any, Optional[Dict[str, Any]]]
         activation function class, dict of activation params
     """
     index = {
-        'relu': nn.ReLU,
-        'sigmoid': nn.Sigmoid,
-        'relu6': nn.ReLU6,
-        'leaky_relu': nn.LeakyReLU,
-        'softmax': nn.Softmax,
-        'linear': None,
+        "relu": nn.ReLU,
+        "sigmoid": nn.Sigmoid,
+        "relu6": nn.ReLU6,
+        "leaky_relu": nn.LeakyReLU,
+        "softmax": nn.Softmax,
+        "linear": None,
     }
 
     params_index = {
-        'relu': {'inplace': True},
-        'sigmoid': {},
-        'relu6': {'inplace': True},
-        'leaky_relu': {'negative_slope': 0.01, 'inplace': True},
-        'softmax': {'dim': 1},
-        'linear': None
+        "relu": {"inplace": True},
+        "sigmoid": {},
+        "relu6": {"inplace": True},
+        "leaky_relu": {"negative_slope": 0.01, "inplace": True},
+        "softmax": {"dim": 1},
+        "linear": None,
     }
     return index[name], params_index[name]
 
 
-def get_pooling_from_params(params: Dict[str, Any]) -> 'nn.Module':
-    index = {
-        'max': nn.MaxPool2d,
-        'avg': nn.AvgPool2d
-    }
-    type_ = params.pop('type')
+def get_pooling_from_params(params: Dict[str, Any]) -> "nn.Module":
+    index = {"max": nn.MaxPool2d, "avg": nn.AvgPool2d}
+    type_ = params.pop("type")
 
     pooling_layer = index[type_](**params)
     return pooling_layer
@@ -50,16 +47,20 @@ def get_pooling_from_params(params: Dict[str, Any]) -> 'nn.Module':
 
 def get_test_input(size: Tuple[int, int] = (416, 416), batch: bool = True):
     img = Image.open("dog-cycle-car.png")
-    img = img.resize(size)          #Resize to the input dimension
+    img = img.resize(size)  # Resize to the input dimension
     img = np.asarray(img)
-    img_ = img.transpose((2, 0, 1))  # BGR -> RGB(PIL by default reads RGB) | H X W C -> C X H X W
-    img_ = img_[np.newaxis, :, :, :]/255.0       #Add a channel at 0 (for batch) | Normalise
-    img_ = from_numpy(img_).float()     #Convert to float
-    img_ = Variable(img_)                     # Convert to Variable
+    img_ = img.transpose(
+        (2, 0, 1)
+    )  # BGR -> RGB(PIL by default reads RGB) | H X W C -> C X H X W
+    img_ = (
+        img_[np.newaxis, :, :, :] / 255.0
+    )  # Add a channel at 0 (for batch) | Normalise
+    img_ = from_numpy(img_).float()  # Convert to float
+    img_ = Variable(img_)  # Convert to Variable
     return img_
 
 
-def unique(tensor: 'Tensor'):
+def unique(tensor: "Tensor"):
     tensor_np = tensor.cpu().numpy()
     unique_np = np.unique(tensor_np)
     unique_tensor = torch.from_numpy(unique_np)

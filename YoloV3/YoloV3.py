@@ -1,4 +1,4 @@
-from typing import Union, Optional, Dict, Any
+from typing import Union, Optional, Dict, Any, List
 from pathlib import Path
 
 import torch
@@ -7,16 +7,19 @@ import torch.nn as nn
 import numpy as np
 
 from YoloV3.utils.parse_yolo_configs import get_layers_from_blocks, parse_yolo_config
-from YoloV3.utils import predict_transform
+from YoloV3 import loss
 from YoloV3.layers import DetectionLayer
+from YoloV3.utils.transform_utils import predict_transform
 
 
 class YoloV3(nn.Module):
-    def __init__(self, config_path: Union["Path", str]):
+    def __init__(self, config_path: Union[Path, str], hyperparams: Dict[str, Any]):
         super(YoloV3, self).__init__()
 
         self.blocks = parse_yolo_config(config_path)
         self.net_info, self.module_list = get_layers_from_blocks(blocks=self.blocks)
+
+        self.hyperparams = hyperparams
 
         self.yolo_layers = [
             layer[0]
@@ -24,11 +27,24 @@ class YoloV3(nn.Module):
             if isinstance(layer[0], DetectionLayer)
         ]
 
-    def forward(self, x):
+    def calculate_loss(
+        self, predictions: List[torch.Tensor], targets: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
+        boxes = torch.cat([target["boxes"] for target in targets], 0)
+        losses = loss.calculate_loss(predictions, boxes, self, self.hyperparams)
+
+        return losses
+
+    def forward(
+        self, x: torch.Tensor, targets: Optional[Dict[str, torch.Tensor]] = None
+    ):
         modules = self.blocks[1:]
         # Catch outputs for route layer
         outputs = {}
         yolo_detections = []
+
+        if self.training and targets is None:
+            torch._assert(False, "`targets` cannot be none while training")
 
         write = False
         for i, module in enumerate(modules):
@@ -57,22 +73,38 @@ class YoloV3(nn.Module):
                     x = torch.cat((outputs[i + start], outputs[i + end]), dim=1)
                 else:
                     x = outputs[i + start]
+
             elif type_ == "shortcut":
                 from_ = int(module["from"])
 
                 x = outputs[i - 1] + outputs[i + from_]
 
             elif type_ == "yolo":
-                # Get the input dimensions
+                anchors = self.module_list[i][0].anchors
                 inp_dim = int(self.net_info["height"])
-                x = self.module_list[i][0](x, inp_dim)
-                yolo_detections.append(x)
+                # Get the number of classes
+                num_classes = int(module["classes"])
+
+                # x = self.module_list[i][0](x, inp_dim)
+                # yolo_detections.append(x)
+                x = x.data
+                x = predict_transform(x, inp_dim, anchors, num_classes, device=x.device)
+
+                if not write:
+                    detections = x
+                    write = True
+                else:
+                    detections = torch.cat((detections, x), 1)
 
             outputs[i] = x
 
-        return yolo_detections
+        if self.training:
+            losses = self.calculate_loss(yolo_detections, targets)
+            return losses
 
-    def load_weights(self, weightfile: Union["Path", str]):
+        return detections
+
+    def load_weights(self, weightfile: Union[Path, str]):
         # Open the weights file
         fp = open(weightfile, "rb")
 
@@ -96,11 +128,12 @@ class YoloV3(nn.Module):
                     batch_normalize = self.blocks[i + 1]["batch_normalize"]
                 except KeyError:
                     batch_normalize = False
-                conv = self.module_list[i].block[0]
+
+                conv = self.module_list[i][0]
 
                 if batch_normalize:
                     # Get the number of weights of Batch Norm Layer
-                    bn = self.module_list[i].block[1]
+                    bn = self.module_list[i][1]
                     num_bn_biases = bn.bias.numel()
 
                     bn_biases = torch.from_numpy(weights[ptr : ptr + num_bn_biases])
@@ -123,11 +156,10 @@ class YoloV3(nn.Module):
                     bn_running_var = bn_running_var.view_as(bn.running_var)
 
                     # Copy the data to model
-                    self.module_list[i].block[1].bias.data.copy_(bn_biases)
-                    self.module_list[i].block[1].weight.data.copy_(bn_weights)
-                    self.module_list[i].block[1].running_mean.copy_(bn_running_mean)
-                    self.module_list[i].block[1].running_var.copy_(bn_running_var)
-
+                    bn.bias.data.copy_(bn_biases)
+                    bn.weight.data.copy_(bn_weights)
+                    bn.running_mean.copy_(bn_running_mean)
+                    bn.running_var.copy_(bn_running_var)
                     # No conv bias if batch norm for YOLOV3
                 else:
                     # Number of biases
@@ -141,7 +173,7 @@ class YoloV3(nn.Module):
                     conv_biases = conv_biases.view_as(conv.bias.data)
 
                     # Finally copy the data
-                    self.module_list[i].block[0].bias.data.copy_(conv_biases)
+                    conv.bias.data.copy_(conv_biases)
 
                 # Load conv weights
                 num_weights = conv.weight.numel()
@@ -150,4 +182,4 @@ class YoloV3(nn.Module):
                 conv_weights = torch.from_numpy(weights[ptr : ptr + num_weights])
                 ptr = ptr + num_weights
                 conv_weights = conv_weights.view_as(conv.weight.data)
-                self.module_list[i].block[0].weight.data.copy_(conv_weights)
+                conv.weight.data.copy_(conv_weights)

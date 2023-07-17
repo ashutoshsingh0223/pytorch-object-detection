@@ -134,6 +134,13 @@ dmypy.json
 # data
 data/
 
+# possible model files
+*.pth
+*.pt
+*.ckpt
+
 # Weights
 weights/
+
+saved_models/
 

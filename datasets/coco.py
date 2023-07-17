@@ -1,28 +1,23 @@
 from typing import Union, Any, List, Optional, Callable, Tuple
 from pathlib import Path
+import warnings
 
 from PIL import Image
 import cv2
+import random
 
 from torchvision.datasets import VisionDataset
+import torch.nn.functional as F
+import torch
 
 import transforms as T
+from presets import Preset
 from base_constants import TRAIN, VALIDATION, TEST, COCO_BOX
 
 
-def get_coco(image_dir: Union['Path', str], annotations_file: Union['Path', str], transforms: Any,
-             mode: str = TRAIN, iou_types: List[str] = [COCO_BOX]):
-    t = []
-    if transforms is not None:
-        t.append(transforms)
-    transforms = T.Compose(t)
-    dataset = CocoDetection(images_dir=image_dir, annotations_file=annotations_file, transforms=transforms)
-
-    if mode == TRAIN:
-        pass
-        # dataset = _coco_remove_images_without_annotations(dataset, iou_types=iou_types)
-
-    return dataset
+def resize(image, size):
+    image = F.interpolate(image.unsqueeze(0), size=size, mode="bilinear").squeeze(0)
+    return image
 
 
 class CocoDetection(VisionDataset):
@@ -45,20 +40,40 @@ class CocoDetection(VisionDataset):
     """
 
     def __init__(
-            self,
-            images_dir: str,
-            annotations_file: Optional[str] = None,
-            transform: Optional[Callable] = None,
-            target_transform: Optional[Callable] = None,
-            transforms: Optional[Callable] = None,
-            yolo: bool = False
+        self,
+        images_dir: str,
+        annotations_file: Optional[str] = None,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        transforms: Optional[Preset] = None,
+        size_range: Optional[Tuple[int, int]] = None,
+        batch_count_for_multiscale: Optional[int] = None,
+        yolo: bool = False,
     ) -> None:
         super().__init__(images_dir, transforms, transform, target_transform)
         from pycocotools.coco import COCO
 
-        self.images_dir: 'Path' = Path(images_dir)
+        self.images_dir: "Path" = Path(images_dir)
 
         self.images_dim = []
+        self.batch_count = 0
+
+        self.yolo = yolo
+        self.size_range = size_range
+        self.batch_count_for_multiscale = batch_count_for_multiscale
+
+        if (self.yolo and self.transforms is not None) and not isinstance(
+            self.transforms.transforms.transforms[-1], T.RelativeBoxes
+        ):
+            torch._assert(
+                False,
+                "When yolo is set for coco dataset, the last transform should be tranforms.RelativeBoxes",
+            )
+
+        if self.size_range is not None:
+            warnings.warn(
+                "Using multiscale training. targets will not scaled and will be in original form, either absolute or relative if yolo is set"
+            )
 
         if annotations_file:
             self.coco = COCO(annotations_file)
@@ -68,9 +83,8 @@ class CocoDetection(VisionDataset):
             self.coco = None
             self.ids = None
             # If annotations file is not specified take all the paths from image_dir
-            self.paths = [x for x in self.images_dir.glob('**/*') if x.is_file()]
+            self.paths = [x for x in self.images_dir.glob("**/*") if x.is_file()]
 
-    
     def _load_image(self, _id: int) -> Image.Image:
         path = self.coco.loadImgs(_id)[0]["file_name"]
         return Image.open(str(Path(self.root) / path))
@@ -82,7 +96,7 @@ class CocoDetection(VisionDataset):
         return Image.open(str(self.paths[index]))
         # return Image.open(str(self.paths[index]))
 
-    def get_img_path(self, index: int) -> Union['Path', str]:
+    def get_img_path(self, index: int) -> Union["Path", str]:
         if self.coco:
             _id = self.ids[index]
             path = self.coco.loadImgs(_id)[0]["file_name"]
@@ -93,8 +107,12 @@ class CocoDetection(VisionDataset):
     def get_img_dim(self, index: int) -> Tuple[int, int]:
         if not self.images_dim:
             if self.coco:
-                self.images_dim = [Image.open(Path(self.root) / self.coco.loadImgs(_id)[0]["file_name"]).size
-                                   for _id in self.ids]
+                self.images_dim = [
+                    Image.open(
+                        Path(self.root) / self.coco.loadImgs(_id)[0]["file_name"]
+                    ).size
+                    for _id in self.ids
+                ]
             else:
                 self.images_dim = [Image.open(p).size for p in self.paths]
 
@@ -110,6 +128,8 @@ class CocoDetection(VisionDataset):
             image = self._load_images_from_dir(index)
             target = {}
 
+        image, target = T.ConvertCocoPolysToMask()(image, target)
+
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
@@ -120,6 +140,33 @@ class CocoDetection(VisionDataset):
             return len(self.ids)
         else:
             return len(self.paths)
+
+    def collate_fn(self, batch: List[Tuple[Any, ...]]) -> Tuple[Any, ...]:
+        images, targets = tuple(zip(*batch))
+
+        self.batch_count += 1
+
+        if (
+            self.size_range is not None
+            and self.batch_count % self.batch_count_for_multiscale
+        ):
+            size = random.choice(range(self.size_range[0], self.size_range[1] + 1, 32))
+            images = torch.stack([resize(img, size) for img in images])
+
+        if self.yolo:
+            for i, target in enumerate(targets):
+                boxes = targets["boxes"]
+                _boxes = torch.zeros(
+                    (boxes.shape[0], boxes.shape[1] + 2),
+                    dtype=boxes.dtype,
+                    device=boxes.device,
+                )
+                _boxes[:, 0] = i
+                _boxes[:, 1] = target["labels"]
+                _boxes[:, 2:] = boxes
+                target["boxes"] = _boxes
+        return images, targets
+
 
 # from yolo_detector import *
 # from argparse import Namespace
