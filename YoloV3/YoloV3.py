@@ -6,7 +6,10 @@ import torch.nn as nn
 
 import numpy as np
 
-from YoloV3.utils.parse_yolo_configs import get_layers_from_blocks, parse_yolo_config
+from YoloV3.utils.parse_yolo_configs import (
+    parse_yolo_config,
+    get_layers_from_blocks,
+)
 from YoloV3 import loss
 from YoloV3.layers import DetectionLayer
 from YoloV3.utils.transform_utils import predict_transform

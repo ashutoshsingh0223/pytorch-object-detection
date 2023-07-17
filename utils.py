@@ -30,7 +30,7 @@ def get_activation_and_params(name: str) -> Tuple[Any, Optional[Dict[str, Any]]]
         "relu": {"inplace": True},
         "sigmoid": {},
         "relu6": {"inplace": True},
-        "leaky_relu": {"negative_slope": 0.01, "inplace": True},
+        "leaky_relu": {"negative_slope": 0.1, "inplace": True},
         "softmax": {"dim": 1},
         "linear": None,
     }

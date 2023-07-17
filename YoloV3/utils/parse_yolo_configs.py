@@ -15,7 +15,7 @@ activation_map_from_yolo = {
 }
 
 
-def parse_yolo_config(path: Union["Path", str]) -> List[Dict[str, Any]]:
+def parse_yolo_config(path: Union[Path, str]) -> List[Dict[str, Any]]:
     path = Path(path) if isinstance(path, str) else path
     cfg: List[str] = open(path, "r").read().split("\n")
 
